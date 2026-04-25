@@ -1,0 +1,63 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: '0 5 * * 0'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: db-backup
+      cancel-in-progress: false
+
+    steps:
+      - name: Install PostgreSQL 16 client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          pg_dump --version
+
+      - name: Create dump
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          set -o pipefail
+
+          TIMESTAMP=$(date -u +%Y-%m-%d_%H%M)
+          DUMP_FILE="gainx-${TIMESTAMP}.sql.gz"
+          echo "DUMP_FILE=${DUMP_FILE}" >> "$GITHUB_ENV"
+          echo "DUMP_NAME=gainx-${TIMESTAMP}" >> "$GITHUB_ENV"
+
+          pg_dump "$DATABASE_URL" \
+            --no-owner \
+            --no-acl \
+            --clean \
+            --if-exists \
+            --quote-all-identifiers \
+            | gzip -9 > "$DUMP_FILE"
+
+          SIZE=$(stat -c%s "$DUMP_FILE")
+          if [ "$SIZE" -lt 1024 ]; then
+            echo "Dump suspiciously small: ${SIZE} bytes"
+            exit 1
+          fi
+          gunzip -t "$DUMP_FILE"
+          echo "Dump OK: $(ls -lh "$DUMP_FILE" | awk '{print $5}')"
+
+      - name: Upload dump as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DUMP_NAME }}
+          path: ${{ env.DUMP_FILE }}
+          retention-days: 90
+          if-no-files-found: error
+          compression-level: 0

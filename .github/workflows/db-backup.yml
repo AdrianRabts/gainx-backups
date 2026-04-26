@@ -14,7 +14,7 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - name: Install PostgreSQL 16 client
+      - name: Install PostgreSQL 17 client
         run: |
           set -euo pipefail
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -22,7 +22,7 @@ jobs:
             -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
           sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
           pg_dump --version
 
       - name: Create dump
